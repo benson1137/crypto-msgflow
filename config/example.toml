@@ -1,0 +1,45 @@
+# 复制为 config/secrets.toml 并填入真实值
+
+[database]
+path = "research.db"
+
+[alerts]
+# Telegram bot token (from @BotFather)
+telegram_token = ""
+# Chat ID to send alerts (get from @userinfobot)
+telegram_chat_id = ""
+
+[fred]
+api_key = ""  # https://fred.stlouisfed.org/docs/api/api_key.html
+series = [
+    "WALCL",      # Fed total assets
+    "WTREGEN",    # TGA (weekly avg)
+    "RRPONTSYD",  # Overnight RRP
+    "DGS10",      # 10Y nominal
+    "T10YIE",     # 10Y breakeven inflation
+    "DFII10",     # 10Y TIPS (real rate)
+]
+
+[okx]
+instruments = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
+
+[twitter]
+# twitterapi.io or similar
+api_key = ""
+kols = [
+    "woonomic",
+    "ki_young_ju",
+    # add more...
+]
+
+[rss]
+sources = [
+    {name = "coindesk", url = "https://www.coindesk.com/arc/outboundfeeds/rss/"},
+    {name = "cointelegraph", url = "https://cointelegraph.com/rss"},
+    {name = "theblock", url = "https://www.theblock.co/rss.xml"},
+]
+
+[proxy]
+# Optional: HTTP_PROXY / HTTPS_PROXY for datacenter IP bypass
+# http_proxy = "http://127.0.0.1:7890"
+# https_proxy = "http://127.0.0.1:7890"

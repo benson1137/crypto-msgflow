@@ -1,0 +1,36 @@
+# crypto-msgflow cron schedule
+# Install: crontab scripts/crontab.example
+# Adjust PROJECT_DIR and PY to your environment.
+#
+# NOTE: cron does NOT inherit the bridge's proxy env. Collectors that need
+# the mihomo proxy (okx_oi) rely on HTTP_PROXY/HTTPS_PROXY being set here.
+# Collectors with use_env_proxy=False (fred, tga) ignore it and go direct.
+
+PROJECT_DIR=/path/to/crypto-msgflow
+PY=/path/to/venv/bin/python3
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+
+# OKX OI — P0, 1m granularity, every 5 min
+*/5 * * * * cd $PROJECT_DIR && $PY -m collectors.okx_oi >> logs/okx_oi.log 2>&1
+
+# FRED macro — daily 1pm UTC
+0 13 * * * cd $PROJECT_DIR && $PY -m collectors.fred >> logs/fred.log 2>&1
+
+# Treasury TGA — weekdays 10pm UTC
+0 22 * * 1-5 cd $PROJECT_DIR && $PY -m collectors.tga >> logs/tga.log 2>&1
+
+# RSS news — every 10 min
+*/10 * * * * cd $PROJECT_DIR && $PY -m collectors.rss >> logs/rss.log 2>&1
+
+# X KOL — every 10 min
+*/10 * * * * cd $PROJECT_DIR && $PY -m collectors.x_kol >> logs/x_kol.log 2>&1
+
+# Daily smoke test — 6am UTC (alerts on failure)
+0 6 * * * cd $PROJECT_DIR && $PY -m pytest tests/smoke/ -q >> logs/smoke.log 2>&1
+
+# Verdict backfill — hourly
+17 * * * * cd $PROJECT_DIR && $PY scripts/backfill_verdicts.py --apply >> logs/backfill.log 2>&1
+
+# listing_alert.py runs as a standalone daemon, NOT cron:
+#   nohup $PY -m watchers.listing_alert >> logs/listing.log 2>&1 &

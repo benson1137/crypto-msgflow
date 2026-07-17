@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# DuckDB
+*.db
+*.db.wal
+research.db*
+
+# Config with secrets
+config/secrets.toml
+config/local.toml
+*.env
+
+# Logs & runtime
+logs/
+*.log
+
+# Archive & backups
+archive/
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

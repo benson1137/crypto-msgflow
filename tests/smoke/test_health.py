@@ -92,6 +92,25 @@ def test_bls_cpi(conn):
         "BLS CPI data stale (>60 days — likely collector down)"
 
 
+# ─── corp_events (BigData) — crypto-equity earnings calendar ────────
+
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_corp_events(conn):
+    """BigData corp_events — forward-looking earnings/conference schedule.
+    Freshness is not by data-age (events are in the future); assert the
+    table has upcoming events and the schema contract holds."""
+    df = conn.execute("SELECT * FROM corp_events").fetchdf()
+
+    if df.empty:
+        pytest.skip("No corp_events yet")
+
+    assert {"entity_id", "category", "event_datetime", "title"}.issubset(df.columns), \
+        "schema drift"
+    # categories are constrained by the API to these two
+    assert set(df["category"].unique()).issubset({"earnings-call", "conference-call"}), \
+        "unexpected category value"
+
+
 # ─── oi_funding (OKX) — P0 ──────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")

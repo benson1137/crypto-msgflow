@@ -72,6 +72,14 @@ class BeaConfig(BaseSettings):
     releases: list[dict[str, str]] = Field(default_factory=list)
 
 
+class BigdataConfig(BaseSettings):
+    api_key: str = ""
+    # Crypto-adjacent equities whose earnings calls move BTC sentiment.
+    # Each entry: {ticker, entity_id, name}. Resolve via
+    # POST /v1/knowledge-graph/companies/listing (MIC:Ticker).
+    entities: list[dict[str, str]] = Field(default_factory=list)
+
+
 class Config(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
@@ -81,6 +89,7 @@ class Config(BaseSettings):
     rss: RssConfig = Field(default_factory=RssConfig)
     bls: BlsConfig = Field(default_factory=BlsConfig)
     bea: BeaConfig = Field(default_factory=BeaConfig)
+    bigdata: BigdataConfig = Field(default_factory=BigdataConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
 
 

@@ -57,6 +57,19 @@ series = [
 api_key = ""
 releases = []
 
+[bigdata]
+api_key = ""  # https://platform.bigdata.com — X-API-KEY
+# Crypto-adjacent equities: earnings calls move BTC sentiment.
+# entity_id resolved via /v1/knowledge-graph/companies/listing
+entities = [
+    {ticker = "COIN", entity_id = "D69946", name = "Coinbase Global"},
+    {ticker = "MSTR", entity_id = "C72B8F", name = "Strategy (MicroStrategy)"},
+    {ticker = "MARA", entity_id = "E743AE", name = "MARA Holdings"},
+    {ticker = "RIOT", entity_id = "56AAC4", name = "Riot Platforms"},
+    {ticker = "HOOD", entity_id = "BB036E", name = "Robinhood Markets"},
+    {ticker = "CLSK", entity_id = "7DFE86", name = "CleanSpark"},
+]
+
 [proxy]
 # Optional: HTTP_PROXY / HTTPS_PROXY for datacenter IP bypass
 # http_proxy = "http://127.0.0.1:7890"

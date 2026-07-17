@@ -83,6 +83,20 @@ CREATE TABLE IF NOT EXISTS verdicts (
 );
 
 -- §2.6 collector_runs (health log)
+CREATE TABLE IF NOT EXISTS corp_events (
+  entity_id      VARCHAR NOT NULL,     -- BigData rp_entity_id (e.g. D69946=COIN)
+  ticker         VARCHAR,              -- XNAS:COIN
+  company        VARCHAR,
+  category       VARCHAR NOT NULL,     -- earnings-call | conference-call
+  event_datetime TIMESTAMP NOT NULL,   -- UTC, scheduled time (forward-looking)
+  title          VARCHAR,
+  fiscal_year    INTEGER,
+  fiscal_period  VARCHAR,
+  updated_at     TIMESTAMP,            -- source's last-updated (schedule can shift)
+  fetched_at     TIMESTAMP NOT NULL,
+  PRIMARY KEY (entity_id, category, event_datetime)
+);
+
 CREATE TABLE IF NOT EXISTS collector_runs (
   collector    VARCHAR NOT NULL,
   started_at   TIMESTAMP NOT NULL,

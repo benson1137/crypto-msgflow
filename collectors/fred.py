@@ -20,6 +20,7 @@ class FredCollector(BaseCollector):
     - WTREGEN: TGA (weekly avg)
     - RRPONTSYD: Overnight RRP
     - DGS10, T10YIE, DFII10: rates
+    - BAMLH0A0HYM2: High Yield OAS (P0)
     """
 
     name = "fred"

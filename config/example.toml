@@ -18,6 +18,7 @@ series = [
     "DGS10",      # 10Y nominal
     "T10YIE",     # 10Y breakeven inflation
     "DFII10",     # 10Y TIPS (real rate)
+    "BAMLH0A0HYM2", # High Yield OAS (P0)
 ]
 
 [okx]

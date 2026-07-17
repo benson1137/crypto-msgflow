@@ -1,36 +1,51 @@
 # crypto-msgflow cron schedule
-# Install: crontab scripts/crontab.example
-# Adjust PROJECT_DIR and PY to your environment.
+# Install:  crontab scripts/crontab.example
+# Inspect:  crontab -l
 #
-# NOTE: cron does NOT inherit the bridge's proxy env. Collectors that need
-# the mihomo proxy (okx_oi) rely on HTTP_PROXY/HTTPS_PROXY being set here.
-# Collectors with use_env_proxy=False (fred, tga) ignore it and go direct.
+# SERIAL EXECUTION (spec §3.2 "串行 + 抖动，不并发"):
+# DuckDB is single-writer. Every collector command is wrapped in
+#   flock -x -w 240 $LOCK ...
+# so they all contend on ONE lock file and run strictly one-at-a-time,
+# even when their cron minutes collide (e.g. */5 and */10 at :00).
+# A waiting collector blocks (up to 240s) instead of crashing on a
+# write-lock conflict. Collectors are fast (seconds), so the queue drains.
+#
+# PROXY: cron does NOT inherit the bridge's proxy env. Collectors needing
+# the mihomo proxy (okx_oi, bls, bigdata, fomc, rss, x_kol) rely on
+# HTTP_PROXY/HTTPS_PROXY set here. use_env_proxy=False collectors
+# (fred, tga, bea — US-gov hosts) ignore it and connect directly.
 
 PROJECT_DIR=/path/to/crypto-msgflow
 PY=/path/to/venv/bin/python3
+LOCK=/tmp/msgflow-collectors.lock
 HTTP_PROXY=http://127.0.0.1:7890
 HTTPS_PROXY=http://127.0.0.1:7890
 
-# OKX OI — P0, 1m granularity, every 5 min
-*/5 * * * * cd $PROJECT_DIR && $PY -m collectors.okx_oi >> logs/okx_oi.log 2>&1
+# ── P0: OKX OI — 1m granularity, every 5 min (unrecoverable if missed) ──
+*/5 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_oi >> logs/okx_oi.log 2>&1'
 
-# FRED macro — daily 1pm UTC
-0 13 * * * cd $PROJECT_DIR && $PY -m collectors.fred >> logs/fred.log 2>&1
+# ── News / social — every 10 min (offset minutes; flock serializes anyway) ──
+*/10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.rss >> logs/rss.log 2>&1'
+2-59/10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.x_kol >> logs/x_kol.log 2>&1'
 
-# Treasury TGA — weekdays 10pm UTC
-0 22 * * 1-5 cd $PROJECT_DIR && $PY -m collectors.tga >> logs/tga.log 2>&1
+# ── Macro (daily, offset minutes) ──
+0  13 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.fred >> logs/fred.log 2>&1'
+15 13 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.bls  >> logs/bls.log 2>&1'
+30 14 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.bea  >> logs/bea.log 2>&1'
+0  22 * * 1-5 flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.tga  >> logs/tga.log 2>&1'
 
-# RSS news — every 10 min
-*/10 * * * * cd $PROJECT_DIR && $PY -m collectors.rss >> logs/rss.log 2>&1
+# ── Calendars (low-frequency, schedules shift slowly) ──
+7 1 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.bigdata >> logs/bigdata.log 2>&1'
+0 12 * * 1  flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.fomc    >> logs/fomc.log 2>&1'
 
-# X KOL — every 10 min
-*/10 * * * * cd $PROJECT_DIR && $PY -m collectors.x_kol >> logs/x_kol.log 2>&1
+# ── Health: daily smoke test 6am UTC (P1 — catches silent failures) ──
+# Read-only; still flocked so it never reads mid-write.
+0 6 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m pytest tests/smoke/ -q >> logs/smoke.log 2>&1'
 
-# Daily smoke test — 6am UTC (alerts on failure)
-0 6 * * * cd $PROJECT_DIR && $PY -m pytest tests/smoke/ -q >> logs/smoke.log 2>&1
+# ── Verdict backfill — hourly at :17 ──
+17 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" scripts/backfill_verdicts.py --apply >> logs/backfill.log 2>&1'
 
-# Verdict backfill — hourly
-17 * * * * cd $PROJECT_DIR && $PY scripts/backfill_verdicts.py --apply >> logs/backfill.log 2>&1
-
-# listing_alert.py runs as a standalone daemon, NOT cron:
-#   nohup $PY -m watchers.listing_alert >> logs/listing.log 2>&1 &
+# ── watchers/listing_alert.py is a STANDALONE DAEMON, not cron. It does NOT
+#    touch the DB, so it needs no lock. Start with: ──
+#   cd $PROJECT_DIR && HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890 \
+#     nohup $PY -m watchers.listing_alert >> logs/listing.log 2>&1 &

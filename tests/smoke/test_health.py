@@ -74,6 +74,24 @@ def test_tga_daily(conn):
         "TGA data stale"
 
 
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_bls_cpi(conn):
+    """BLS CPI — monthly with 4-6wk publication lag, so obs_date lags ~1 month.
+    Freshness window is wide (60 days) to tolerate the structural lag."""
+    df = conn.execute(
+        "SELECT * FROM macro_series WHERE series_id='CUUR0000SA0' AND source='bls'"
+    ).fetchdf()
+
+    if df.empty:
+        pytest.skip("No BLS data yet")
+
+    assert {"obs_date", "value"}.issubset(df.columns), "schema drift"
+    latest = df["obs_date"].max()
+    # Monthly cadence + publication lag: allow up to 60 days
+    assert latest.date() > (utcnow().date() - timedelta(days=60)), \
+        "BLS CPI data stale (>60 days — likely collector down)"
+
+
 # ─── oi_funding (OKX) — P0 ──────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")

@@ -40,6 +40,23 @@ sources = [
     {name = "theblock", url = "https://www.theblock.co/rss.xml"},
 ]
 
+[bls]
+# api_key optional; registration lifts daily quota 25 → 500
+api_key = ""
+series = [
+    "CUUR0000SA0",      # CPI-U all items
+    "CUUR0000SA0L1E",   # Core CPI (less food & energy)
+    "LNS14000000",      # Unemployment rate
+    "CES0000000001",    # Nonfarm payrolls (total)
+    "CES0500000003",    # Avg hourly earnings
+]
+
+[bea]
+# Watcher (not collector): polls release schedule, alerts on fresh data.
+# NOTE: architecture decision pending — see chat.
+api_key = ""
+releases = []
+
 [proxy]
 # Optional: HTTP_PROXY / HTTPS_PROXY for datacenter IP bypass
 # http_proxy = "http://127.0.0.1:7890"

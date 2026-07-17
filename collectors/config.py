@@ -52,6 +52,26 @@ class ProxyConfig(BaseSettings):
     https_proxy: str | None = None
 
 
+class BlsConfig(BaseSettings):
+    api_key: str = ""  # optional: registration lifts 25→500 req/day
+    series: list[str] = Field(
+        default_factory=lambda: [
+            "CUUR0000SA0",      # CPI-U all items
+            "CUUR0000SA0L1E",   # Core CPI (all items less food & energy)
+            "LNS14000000",      # Unemployment rate
+            "CES0000000001",    # Nonfarm payrolls (total)
+            "CES0500000003",    # Avg hourly earnings
+        ]
+    )
+
+
+class BeaConfig(BaseSettings):
+    api_key: str = ""
+    # Watcher: which release tables to poll for freshly-published data.
+    # Each entry: {dataset, table, freq, name}
+    releases: list[dict[str, str]] = Field(default_factory=list)
+
+
 class Config(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
@@ -59,6 +79,8 @@ class Config(BaseSettings):
     okx: OkxConfig = Field(default_factory=OkxConfig)
     twitter: TwitterConfig = Field(default_factory=TwitterConfig)
     rss: RssConfig = Field(default_factory=RssConfig)
+    bls: BlsConfig = Field(default_factory=BlsConfig)
+    bea: BeaConfig = Field(default_factory=BeaConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
 
 

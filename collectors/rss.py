@@ -25,6 +25,9 @@ class RssCollector(BaseCollector):
     name = "rss"
     schedule = "*/10 * * * *"
     max_staleness = timedelta(days=2)  # per-source override recommended
+    # Content-driven: some feeds publish once a day. Newest-article age is a
+    # bad liveness signal — rely on heartbeat (§6.2) + consecutive-empty (§6.3).
+    staleness_by_data_ts = False
 
     def __init__(self):
         super().__init__()

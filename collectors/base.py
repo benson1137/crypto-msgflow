@@ -45,6 +45,14 @@ class BaseCollector(ABC):
     #   False → bypass env proxy, direct connection
     use_env_proxy: bool = True
 
+    # Whether "latest data timestamp is old" means the collector is broken.
+    # True  → cadence-driven sources (OKX OI publishes every 5m; stale data
+    #         = collector broken). Judge staleness by max data ts.
+    # False → content-driven sources (X/RSS; a KOL not tweeting for days is
+    #         normal, NOT a failure). Liveness is covered by heartbeat
+    #         (§6.2) + consecutive-empty (§6.3), not by data ts.
+    staleness_by_data_ts: bool = True
+
     def __init__(self):
         self.config = get_config()
         self.db_path = Path(__file__).parent.parent / self.config.database.path
@@ -109,7 +117,15 @@ class BaseCollector(ABC):
             # Determine status
             if n == 0:
                 status = 'empty'
-            elif max_ts and utcnow() - max_ts > self.max_staleness:
+            elif (
+                self.staleness_by_data_ts
+                and max_ts
+                and utcnow() - max_ts > self.max_staleness
+            ):
+                # Only content sources with a guaranteed publish cadence
+                # (OKX OI, FRED) treat old data as a fault. Content-driven
+                # sources (X, RSS) rely on heartbeat + consecutive-empty
+                # instead — see staleness_by_data_ts docstring.
                 status = 'stale'
                 send_stale_alert(self.name, max_ts, self.max_staleness)
             else:

@@ -30,6 +30,10 @@ class XKolCollector(BaseCollector):
     name = "x_kol"
     schedule = "*/10 * * * *"
     max_staleness = timedelta(minutes=30)
+    # Content-driven: a KOL going quiet for days is normal, not a failure.
+    # Liveness is guarded by heartbeat (§6.2) + consecutive-empty (§6.3),
+    # NOT by newest-tweet age — otherwise this alerts almost every run.
+    staleness_by_data_ts = False
 
     def __init__(self):
         super().__init__()
@@ -62,7 +66,14 @@ class XKolCollector(BaseCollector):
 
                 data = resp.json()
 
-                tweets = data.get("tweets") or data.get("data") or []
+                # twitterapi.io shape (verified 2026-07-17): data.data.tweets is the list
+                inner = data.get("data")
+                if isinstance(inner, dict):
+                    tweets = inner.get("tweets", [])
+                elif isinstance(inner, list):
+                    tweets = inner
+                else:
+                    tweets = data.get("tweets", [])
                 if not isinstance(tweets, list):
                     raise SchemaDrift(f"Unexpected tweets shape for {handle}: {type(tweets)}")
 

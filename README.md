@@ -1,173 +1,126 @@
 # crypto-msgflow
 
-**Crypto message-flow research system** — 加密货币信息流研究系统。
+加密货币消息面采集系统。cron 驱动的哑进程把宏观、拥挤度、新闻、社交、
+财报日历采进 DuckDB，供分析层只读消费。
 
-## 设计理念
+## 功能
 
-从信息流到判断流，再到回测循环。核心问题不是"爬什么"，而是"你当时怎么判断的，后来对了吗？"
+- **宏观时序**：美联储资产负债表、TGA、逆回购、利率、通胀、HY 信用利差、CPI、PCE、失业率、非农
+- **拥挤度**：OKX 永续持仓量 + 资金费率 + 标记价
+- **事件去重**：新闻/社交按标题 hash 归并，记录首见时间与传播广度
+- **前瞻日历**：加密相关股财报日程、FOMC 议息日程
+- **判断记录**：verdicts 表记录可证伪预测 + 回填实际收益
+- **健康监控**：区分「真没数据」与「拿不到数据」，防静默失败
 
-### P2 原则：沉默比崩溃更危险
+## 当前调通的渠道
 
-监控系统最致命的失败不是崩溃（你立刻知道），而是**静默返回空数据**——你以为"今天没新闻"，实际上是采集器 429 / 反爬 / schema drift，但它没报错。
+| 渠道 | 采集器 | 数据 | 认证 |
+|---|---|---|---|
+| FRED | `fred` | 7 宏观 series（含 HY OAS） | API key（免费） |
+| Treasury | `tga` | 日频 TGA 余额 | 无 |
+| BLS | `bls` | CPI / 核心CPI / 失业率 / 非农 / 时薪 | API key（可选，升配额） |
+| BEA | `bea` | PCE / 核心PCE | API key（免费，需激活） |
+| OKX | `okx_oi` | BTC/ETH 永续 OI+funding | 无（公开行情） |
+| RSS | `rss` | coindesk / cointelegraph / theblock / FOMC | 无 |
+| X/Twitter | `x_kol` | KOL 推文 | twitterapi.io key |
+| BigData | `bigdata` | COIN/MSTR/MARA/RIOT/HOOD/CLSK 财报 | API key |
+| FOMC | `fomc` | 议息前瞻日程 | 无 |
+| 上币公告 | `listing_alert`(watcher) | OKX/Binance 新上币 | 无 |
 
-所以 `collector_runs` 表区分 4 种状态：
-- `ok` — 正常
-- `empty` — 抓到了，但确实没数据
-- `stale` — 抓到了，但最新数据太旧（上游可能在返回缓存）
-- `error` — 崩了
-
-**永远不要让 empty 和 error 看起来一样**。
-
-### P0 数据：不可重取的时刻
-
-| 数据 | 为什么是 P0 |
-|---|---|
-| OKX OI history | API 窗口有限，今晚不采=永久丢失 |
-| X 推文 | 会删推、会封号 |
-| HY OAS | 市场情绪指标，历史数据有回测价值 |
-| **你的判断记录** | 永远不可能重来 |
-
-## 数据模型
-
-DuckDB 单文件 (`research.db`)。4 张核心表：
-
-1. **`macro_series`** — 宏观时序（FRED / Treasury）
-2. **`oi_funding`** — OKX 持仓量 + 资金费率（拥挤度）
-3. **`events` / `sightings`** — 事件归并（content hash 去重）
-4. **`verdicts`** — 判断记录 + realized return 回填
-
-## 目录结构
-
-```
-crypto-msgflow/
-├── collectors/          # 数据采集器
-│   ├── base.py         # BaseCollector 基类
-│   ├── fred.py         # 宏观数据（FRED）
-│   ├── tga.py          # 财政部 TGA 日频
-│   ├── okx_oi.py       # OKX OI + funding (P0)
-│   ├── rss.py          # RSS 新闻
-│   ├── x_kol.py        # X/Twitter KOL (P0)
-│   ├── dedup.py        # content hash + coin 抽取
-│   ├── events.py       # events/sightings 写入
-│   └── alerts.py       # 告警通道
-├── scripts/
-│   ├── init_db.py      # 初始化 schema
-│   ├── create_verdict.py
-│   └── backfill_verdicts.py
-├── tests/smoke/        # 每日 smoke tests
-│   └── test_health.py
-├── config/
-│   ├── example.toml
-│   └── secrets.toml    # (gitignored)
-└── research.db         # (gitignored)
-```
+**未接入**：CME FedWatch（数据中心 IP 被封）、FMP 经济日历（付费专属，已废弃）。
 
 ## 快速开始
 
-### 1. 安装依赖
-
 ```bash
+# 依赖
 pip install duckdb httpx feedparser pydantic pydantic-settings
-```
+# Python 3.11+ 自带 tomllib，否则 pip install tomli
 
-Python 3.11+ 推荐（内置 `tomllib`），否则需要 `pip install tomli`。
-
-### 2. 初始化配置
-
-```bash
+# 配置
 cp config/example.toml config/secrets.toml
-# 编辑 secrets.toml，填入 API keys
-```
+# 编辑 secrets.toml 填 API keys
 
-### 3. 初始化数据库
-
-```bash
+# 建库
 python3 scripts/init_db.py
+
+# 跑单个采集器
+python3 -m collectors.fred
+python3 -m collectors.okx_oi
 ```
 
-### 4. 手动跑一次采集器
+## 用法
 
+### 跑采集器
+每个采集器都是独立模块，`python3 -m collectors.<name>`：
 ```bash
-python3 collectors/fred.py
-python3 collectors/okx_oi.py
+python3 -m collectors.fred      # 宏观
+python3 -m collectors.bls       # 劳工统计
+python3 -m collectors.bea       # PCE
+python3 -m collectors.okx_oi    # 持仓量（P0，5 分钟一次）
+python3 -m collectors.rss       # 新闻 + FOMC 声明
+python3 -m collectors.x_kol     # X KOL
+python3 -m collectors.bigdata   # 加密股财报日历
+python3 -m collectors.fomc      # FOMC 议息日程
 ```
 
-### 5. 查看数据
+### 上币告警（常驻进程，非 cron）
+```bash
+python3 -m watchers.listing_alert   # 5s 轮询，新上币推 Telegram
+```
 
+### 记录判断
+```bash
+python3 scripts/create_verdict.py "净流动性下降，BTC 4h 内回调" \
+    --label INFERRED --confidence MED --predict-dir down --predict-window 4h
+python3 scripts/backfill_verdicts.py   # 回填实际收益
+```
+
+### 查数据
 ```python
 import duckdb
-conn = duckdb.connect('research.db')
+c = duckdb.connect('research.db')
 
-# 查看 FRED 数据
-conn.execute("SELECT * FROM macro_series WHERE series_id='RRPONTSYD' ORDER BY obs_date DESC LIMIT 5").fetchdf()
+# 净流动性输入（注意单位：WALCL/WTREGEN 百万美元，RRP 十亿美元）
+c.execute("SELECT series_id, obs_date, value FROM macro_series "
+          "WHERE series_id IN ('WALCL','WTREGEN','RRPONTSYD') "
+          "AND source='fred' ORDER BY obs_date DESC LIMIT 9").fetchdf()
 
-# 查看 OI
-conn.execute("SELECT * FROM oi_funding WHERE inst_id='BTC-USDT-SWAP' ORDER BY ts DESC LIMIT 5").fetchdf()
+# 事件传播广度
+c.execute("SELECT e.canonical_title, COUNT(DISTINCT s.source) breadth "
+          "FROM events e JOIN sightings s USING(event_id) "
+          "GROUP BY 1 ORDER BY breadth DESC LIMIT 10").fetchdf()
 
-# 查看采集器健康度
-conn.execute("SELECT * FROM collector_runs ORDER BY started_at DESC LIMIT 10").fetchdf()
+# 未来 FOMC 会议
+c.execute("SELECT event_date, detail, has_press_conf FROM macro_calendar "
+          "WHERE event_type='FOMC' AND event_date >= CURRENT_DATE "
+          "ORDER BY event_date").fetchdf()
+
+# 加密股财报日程
+c.execute("SELECT ticker, event_datetime, fiscal_period FROM corp_events "
+          "ORDER BY event_datetime").fetchdf()
+
+# 采集器健康
+c.execute("SELECT collector, status, rows_written, started_at "
+          "FROM collector_runs ORDER BY started_at DESC LIMIT 12").fetchdf()
 ```
 
-## 生产部署
-
-### Cron 定时任务
-
-```cron
-# FRED 宏观数据（UTC 13:00 = 美东上午）
-0 13 * * * cd /path/to/crypto-msgflow && python3 collectors/fred.py
-
-# OKX OI (P0: 每 5 分钟)
-*/5 * * * * cd /path/to/crypto-msgflow && python3 collectors/okx_oi.py
-
-# X KOL (P0: 每 10 分钟)
-*/10 * * * * cd /path/to/crypto-msgflow && python3 collectors/x_kol.py
-
-# RSS 新闻
-*/10 * * * * cd /path/to/crypto-msgflow && python3 collectors/rss.py
-```
-
-### Smoke tests
-
-每天跑一次，验证：
-1. 数据存在
-2. Schema 没漂移
-3. **数据足够新鲜**（最关键）
-
+### 部署
 ```bash
-pytest tests/smoke/test_health.py
+# 编辑 scripts/crontab.example 后
+crontab scripts/crontab.example
 ```
 
-## API 要求
+### 健康检查
+```bash
+python3 -m pytest tests/smoke/     # 每采集器三断言：存在性/契约/时效性
+```
 
-| 服务 | 认证方式 | 备注 |
-|---|---|---|
-| FRED | API key（免费） | https://fred.stlouisfed.org/docs/api/api_key.html |
-| Treasury Fiscal Data | 无需认证 | |
-| OKX | 无需认证（公开 API） | 需要代理（见下） |
-| twitterapi.io | API key（付费） | https://twitterapi.io |
+## 文档
 
-### 代理配置
+- `spec.md` — 数据模型、采集器规格、健康监控
+- `design.md` — 代码架构、控制流、扩展点
 
-OKX 在某些数据中心 IP 段被墙。`BaseCollector` 实现了 per-source 代理策略：
+## 代理说明
 
-- `use_env_proxy=True` — 信任环境变量 `HTTP_PROXY` / `HTTPS_PROXY`（OKX 需要）
-- `use_env_proxy=False` — 绕过代理，直连（美国政府源 FRED/Treasury 需要）
-
-项目使用 mihomo 作为全局代理，环境变量由 systemd drop-in 注入。
-
-## 设计文档
-
-完整设计思路见项目根目录的设计文档（Markdown），包含：
-- §1-§2: 数据模型与时区约定
-- §3: BaseCollector 契约
-- §4: 各采集器规格
-- §5: 去重机制（content hash）
-- §6: 告警与 smoke tests
-
-## License
-
-MIT
-
-## 作者
-
-研究工具，仅供个人使用。不构成投资建议。
+数据中心 IP 部分源需 mihomo 代理，采集器按源分别配置（`use_env_proxy`）：
+FRED/TGA/BEA 直连，OKX/BLS/RSS/BigData/FOMC 走代理。详见 `design.md` §3。

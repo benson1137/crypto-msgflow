@@ -53,10 +53,9 @@ series = [
 ]
 
 [bea]
-# Watcher (not collector): polls release schedule, alerts on fresh data.
-# NOTE: architecture decision pending — see chat.
+# Collector: PCE price index from NIPA T20804 → macro_series (source='bea').
+# Register + activate at https://apps.bea.gov/api/signup/
 api_key = ""
-releases = []
 
 [bigdata]
 api_key = ""  # https://platform.bigdata.com — X-API-KEY

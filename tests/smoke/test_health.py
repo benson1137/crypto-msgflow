@@ -133,6 +133,24 @@ def test_fomc_calendar(conn):
     assert len(future) > 0, "no future FOMC meetings — scraper likely broke"
 
 
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_bea_pce(conn):
+    """BEA core PCE — monthly, ~4wk publication lag (60-day freshness window)."""
+    df = conn.execute(
+        "SELECT * FROM macro_series WHERE series_id='PCEPILFE' AND source='bea'"
+    ).fetchdf()
+
+    if df.empty:
+        pytest.skip("No BEA data yet")
+
+    assert {"obs_date", "value"}.issubset(df.columns), "schema drift"
+    latest = df["obs_date"].max()
+    # PCE lags worse than CPI: month M publishes ~end of M+1, so obs_date can
+    # be ~2 months old at the tightest point. 95-day window covers it.
+    assert latest.date() > (utcnow().date() - timedelta(days=95)), \
+        "BEA core PCE stale (>95 days — likely collector down)"
+
+
 # ─── oi_funding (OKX) — P0 ──────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")

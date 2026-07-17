@@ -97,6 +97,16 @@ CREATE TABLE IF NOT EXISTS corp_events (
   PRIMARY KEY (entity_id, category, event_datetime)
 );
 
+CREATE TABLE IF NOT EXISTS macro_calendar (
+  event_type     VARCHAR NOT NULL,     -- 'FOMC'
+  event_date     DATE NOT NULL,        -- decision day (meeting end) = market mover
+  detail         VARCHAR,              -- e.g. 'Jan 27-28'
+  has_press_conf BOOLEAN DEFAULT FALSE,
+  source         VARCHAR NOT NULL,     -- 'federalreserve'
+  fetched_at     TIMESTAMP NOT NULL,
+  PRIMARY KEY (event_type, event_date, source)
+);
+
 CREATE TABLE IF NOT EXISTS collector_runs (
   collector    VARCHAR NOT NULL,
   started_at   TIMESTAMP NOT NULL,

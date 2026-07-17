@@ -111,6 +111,28 @@ def test_corp_events(conn):
         "unexpected category value"
 
 
+# ─── macro_calendar (FOMC) — forward-looking macro schedule ─────────
+
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_fomc_calendar(conn):
+    """FOMC forward calendar — must have upcoming meetings scheduled.
+    Freshness is forward-looking: assert at least one future meeting
+    exists (empty/all-past = scraper broke or page structure drifted)."""
+    df = conn.execute(
+        "SELECT * FROM macro_calendar WHERE event_type='FOMC'"
+    ).fetchdf()
+
+    if df.empty:
+        pytest.skip("No FOMC calendar yet")
+
+    assert {"event_type", "event_date", "has_press_conf"}.issubset(df.columns), \
+        "schema drift"
+    # There must be at least one meeting in the future — the whole point
+    # is a forward calendar. All-past means the scraper silently broke.
+    future = df[df["event_date"].dt.date > utcnow().date()]
+    assert len(future) > 0, "no future FOMC meetings — scraper likely broke"
+
+
 # ─── oi_funding (OKX) — P0 ──────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")

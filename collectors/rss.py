@@ -48,6 +48,10 @@ class RssCollector(BaseCollector):
                 # Truly broken feed — this is a signal, not silent failure
                 raise SchemaDrift(f"RSS feed '{name}' unparseable: {feed.get('bozo_exception')}")
 
+            # Per-source category override (e.g. FOMC feed → 'macro').
+            # Defaults to 'news' for ordinary crypto press feeds.
+            category = source.get("category", "news")
+
             for entry in feed.entries:
                 # Parse timestamp
                 ts = utcnow()
@@ -65,6 +69,7 @@ class RssCollector(BaseCollector):
                     "title": title,
                     "url": entry.get("link", ""),
                     "ts": ts,
+                    "category": category,
                 })
 
         return rows
@@ -101,7 +106,7 @@ class RssCollector(BaseCollector):
                     INSERT INTO events (event_id, canonical_title, first_seen_ts, category, coins)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    [event_id, row["title"], row["ts"], "news", coins],
+                    [event_id, row["title"], row["ts"], row.get("category", "news"), coins],
                 )
 
             # Insert sighting

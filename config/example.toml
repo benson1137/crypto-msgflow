@@ -38,6 +38,7 @@ sources = [
     {name = "coindesk", url = "https://www.coindesk.com/arc/outboundfeeds/rss/"},
     {name = "cointelegraph", url = "https://cointelegraph.com/rss"},
     {name = "theblock", url = "https://www.theblock.co/rss.xml"},
+    {name = "fomc", url = "https://www.federalreserve.gov/feeds/press_monetary.xml", category = "macro"},
 ]
 
 [bls]

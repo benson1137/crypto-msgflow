@@ -20,12 +20,15 @@
 | Treasury | `tga` | 日频 TGA 余额 | 无 |
 | BLS | `bls` | CPI / 核心CPI / 失业率 / 非农 / 时薪 | API key（可选，升配额） |
 | BEA | `bea` | PCE / 核心PCE | API key（免费，需激活） |
-| OKX | `okx_oi` | BTC/ETH 永续 OI+funding | 无（公开行情） |
+| OKX | `okx_oi` / `okx_oi_1h` / `okx_price` | BTC/ETH 永续 OI+funding（15m 实时 + 1h 骨架）、价格历史 | 无（公开行情） |
 | RSS | `rss` | coindesk / cointelegraph / theblock / FOMC | 无 |
 | X/Twitter | `x_kol` | KOL 推文 | twitterapi.io key |
 | BigData | `bigdata` | COIN/MSTR/MARA/RIOT/HOOD/CLSK 财报 | API key |
 | FOMC | `fomc` | 议息前瞻日程 | 无 |
-| 上币公告 | `listing_alert`(watcher) | OKX/Binance 新上币 | 无 |
+| 上币公告 | `listing_alert`(watcher) | OKX/Binance 新上币 → Lark | 无 |
+
+**告警**：采集器故障/stale 与上币公告经 lark-cli（bot 身份）推送到专用飞书群，
+与指挥通道隔离。cron `MAILTO` 邮件兜底。
 
 **未接入**：CME FedWatch（数据中心 IP 被封）、FMP 经济日历（付费专属，已废弃）。
 
@@ -56,16 +59,25 @@ python3 -m collectors.okx_oi
 python3 -m collectors.fred      # 宏观
 python3 -m collectors.bls       # 劳工统计
 python3 -m collectors.bea       # PCE
-python3 -m collectors.okx_oi    # 持仓量（P0，5 分钟一次）
+python3 -m collectors.okx_oi    # 拥挤度实时纹理（rt15，15 分钟一次）
+python3 -m collectors.okx_oi_1h # OI 1h 骨架（一天两次，可回补 30 天窗）
+python3 -m collectors.okx_price # 价格历史 1h OHLCV（verdict 回填用，可回溯）
 python3 -m collectors.rss       # 新闻 + FOMC 声明
 python3 -m collectors.x_kol     # X KOL
 python3 -m collectors.bigdata   # 加密股财报日历
 python3 -m collectors.fomc      # FOMC 议息日程
 ```
 
+### 新闻全文（按需 fetch，7 天 LRU）
+```python
+from collectors.fulltext import get_fulltext
+body = get_fulltext(event_id, url)   # 缓存未命中才抓，curl_cffi TLS 伪装
+```
+
 ### 上币告警（常驻进程，非 cron）
 ```bash
-python3 -m watchers.listing_alert   # 5s 轮询，新上币推 Telegram
+python3 -m watchers.listing_alert   # 5s 轮询，新上币推 Lark
+# 生产用 systemd user service（见 deploy/msgflow-listing.service）
 ```
 
 ### 记录判断

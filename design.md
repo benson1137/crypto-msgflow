@@ -10,16 +10,18 @@ collectors/          # cron 哑进程，写 DuckDB
   config.py          # pydantic 配置模型 + TOML 加载
   timeutil.py        # utcnow() — 全系统统一 UTC-naive
   rate_limit.py      # TokenBucket 令牌桶 + RateLimited
-  alerts.py          # Telegram / stderr 告警
+  alerts.py          # Lark (lark-cli bot) / stderr 告警
   dedup.py           # normalize / content_hash / extract_coins
   events.py          # events/sightings 写入辅助
+  fulltext.py        # 按需全文 get_fulltext + 7天LRU（curl_cffi）
   fred.py tga.py bls.py bea.py        # 宏观 → macro_series
-  okx_oi.py                            # 拥挤度 → oi_funding
+  okx_oi.py                            # OI 实时(rt15)+1h骨架 → oi_funding
+  okx_price.py                         # 1H OHLCV → price_candles（verdict回填源）
   rss.py x_kol.py                      # 新闻/社交 → events/sightings
   bigdata.py                           # 加密股财报 → corp_events
   fomc.py                              # FOMC 日程 → macro_calendar
 watchers/
-  listing_alert.py   # 常驻进程，5s 轮询上币公告 → Telegram
+  listing_alert.py   # 常驻进程(systemd)，5s 轮询上币公告 → Lark 告警群
 scripts/
   init_db.py           # 建表（幂等 CREATE IF NOT EXISTS）
   create_verdict.py    # 手动写判断
@@ -83,15 +85,15 @@ run():
 |---|---|---|
 | FRED / TGA / BEA | 直连 | 美国政府源，走 mihomo 反而断 |
 | BLS | mihomo + 重试 | 直连超时；mihomo 出口对 BLS 仅约 25% 健康，短 timeout+6 次重试命中好节点 |
-| OKX | mihomo | 数据中心 IP 直连被墙 |
-| RSS / FOMC / BigData | mihomo | 可通 |
+| OKX (oi/price) | mihomo | 数据中心 IP 直连被墙 |
+| RSS / FOMC / BigData / X | mihomo | 可通 |
 
 ## 4. staleness 两种语义
 
 `base.py` 的 `staleness_by_data_ts` 开关区分：
 
 - **True（数据ts）**：节奏源。最新数据超 `max_staleness` = 采集器坏了 → stale + 告警。
-  用于 OKX(15m)、FRED(8d)、TGA(4d)。
+  用于 okx_oi(45m)、okx_oi_1h(3h)、okx_price(14h)、FRED(8d)、TGA(4d)。
 - **False（心跳）**：内容驱动源（X/RSS，KOL 沉默几天正常）或 obs_date 结构性滞后源
   （BLS/BEA 月度数据延迟发布）。活性靠 `collector_runs` 心跳 + 连续 empty 检测。
 

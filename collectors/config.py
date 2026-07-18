@@ -20,6 +20,9 @@ class AlertsConfig(BaseSettings):
     telegram_chat_id: str = ""
     # Lark/Feishu via lark-cli (bot identity). Alerts go to this chat_id.
     lark_chat_id: str = ""
+    # Bridge profile env for lark-cli bot identity in cron (machine paths —
+    # kept out of the repo, lives in secrets.toml). Empty in bridge context.
+    lark_env: dict[str, str] = Field(default_factory=dict)
 
 
 class FredConfig(BaseSettings):

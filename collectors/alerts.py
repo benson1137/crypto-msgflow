@@ -46,16 +46,22 @@ def _send_telegram(token: str, chat_id: str, message: str):
     resp.raise_for_status()
 
 
-# Bridge profile env needed for lark-cli bot identity in a detached (cron)
-# process. Values are the current profile's; lark-cli reads bot creds from
-# LARKSUITE_CLI_CONFIG_DIR on disk, so they persist outside the bridge.
-_LARK_ENV = {
-    "LARK_CHANNEL": "1",
-    "LARK_CHANNEL_HOME": "/path/to/lark-channel-home",
-    "LARK_CHANNEL_PROFILE": "claude",
-    "LARKSUITE_CLI_CONFIG_DIR": "/path/to/lark-cli-config",
-    "LARK_CHANNEL_CONFIG": "/path/to/lark-cli-source/config.json",
-}
+def _lark_env() -> dict:
+    """Bridge profile env for lark-cli bot identity in a detached (cron) proc.
+
+    Contains machine-absolute paths (username, dir layout), so it lives in
+    secrets.toml [alerts.lark_env], NOT in the repo. If already present in
+    the process env (running inside the bridge), we just inherit those.
+    Returns {} when neither source has it — send falls back to whatever
+    identity the ambient lark-cli config resolves to.
+    """
+    import os
+    keys = ("LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE",
+            "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL_CONFIG")
+    if all(k in os.environ for k in keys):
+        return {}  # bridge already injected them
+    cfg = get_config().alerts.lark_env
+    return dict(cfg) if cfg else {}
 
 
 def _send_lark_cli(chat_id: str, message: str):
@@ -69,7 +75,7 @@ def _send_lark_cli(chat_id: str, message: str):
     import os
     import subprocess
 
-    env = {**os.environ, **_LARK_ENV}
+    env = {**os.environ, **_lark_env()}
     proc = subprocess.run(
         ["lark-cli", "im", "+messages-send", "--chat-id", chat_id,
          "--text", message],

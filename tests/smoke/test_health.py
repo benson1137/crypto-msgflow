@@ -249,6 +249,19 @@ def test_price_candles(conn):
     assert (df["close"] > 0).all(), "non-positive close price"
 
 
+def test_news_fulltext_schema(conn):
+    """news_fulltext is a 7-day LRU cache; assert schema + no stale rows leak.
+    (Read path is collectors.fulltext.get_fulltext, not a direct query.)"""
+    cols = conn.execute("SELECT * FROM news_fulltext LIMIT 0").fetchdf().columns
+    assert {"event_id", "url", "body", "fetched_at"}.issubset(cols), "schema drift"
+    # Nothing older than ~8 days should survive (daily evict keeps 7-day cap).
+    stale = conn.execute(
+        "SELECT COUNT(*) FROM news_fulltext WHERE fetched_at < ? - INTERVAL 8 DAY",
+        [utcnow()],
+    ).fetchone()[0]
+    assert stale == 0, f"{stale} rows older than 8d — eviction not running"
+
+
 def test_verdicts_realized_ret_exists(conn):
     """verdicts must have realized_ret column — the whole point (§2.5)."""
     cols = conn.execute("SELECT * FROM verdicts LIMIT 0").fetchdf().columns

@@ -52,6 +52,9 @@ HTTPS_PROXY=http://127.0.0.1:7890
 # ── Verdict backfill — hourly at :17 ──
 17 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" scripts/backfill_verdicts.py --apply >> logs/backfill.log 2>&1'
 
+# ── news_fulltext LRU eviction — daily 5am UTC (7-day cap) ──
+0 5 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.fulltext >> logs/fulltext.log 2>&1'
+
 # ── watchers/listing_alert.py is a STANDALONE DAEMON, not cron. It does NOT
 #    touch the DB, so it needs no lock. Start with: ──
 #   cd $PROJECT_DIR && HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890 \

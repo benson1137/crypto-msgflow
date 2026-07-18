@@ -60,6 +60,15 @@ df = conn.execute("SELECT ...").fetchdf()
 - **breadth（多少家在说）= sightings 里某 event_id 的 DISTINCT source 数**，事后重建不出来。
 - `sightings.source` 形如 `rss:coindesk`、`x:@ki_young_ju`、`rss:fomc`。
 
+### news_fulltext（全文按需取，别直接查表）
+采集层**不存全文**，`sightings` 只有 url+title。要读正文走入口函数，不要直接
+查 `news_fulltext` 表（它是缓存，未必有你要的那条）：
+```python
+from collectors.fulltext import get_fulltext
+body = get_fulltext(event_id, url)   # 命中返回；未命中现 fetch 并缓存 7 天
+```
+返回 None = fetch 失败（付费墙/反爬/404），调用方自行处理。
+
 ### verdicts
 - 唯一允许 UPDATE 的表（只 `realized_ret` / `realized_at` 两字段回填）。
 - `label`: KNOWN|COMPUTED|INFERRED|COMMON|FRAME|GUESS

@@ -3,12 +3,12 @@
 Listing announcement watcher — standalone process, low latency.
 
 Polls OKX + Binance announcement endpoints every 5s.
-New listing → Telegram push. Does NOT write DB, does NOT call LLM.
+New listing → Lark push (bot). Does NOT write DB, does NOT call LLM.
 
 This is the highest-ROI, lowest-intelligence part of the system.
 
-NOTE (Appendix A #1): verify whether OKX announcements are at
-/api/v5/support/announcements before relying on it.
+Verified (Appendix A #1): OKX announcements ARE at
+/api/v5/support/announcements?annType=announcements-new-listings.
 """
 import sys
 import time
@@ -18,7 +18,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from collectors.alerts import _send_telegram
+from collectors.alerts import _send_lark_cli, _send_telegram
 from collectors.config import get_config
 
 POLL_INTERVAL = 5  # seconds
@@ -78,14 +78,26 @@ def poll_binance(client: httpx.Client, seen: set) -> list[str]:
     return new
 
 
+def _push(config, msg: str):
+    """Push a listing alert to Lark (primary) + Telegram (if configured)."""
+    if config.alerts.lark_chat_id:
+        try:
+            _send_lark_cli(config.alerts.lark_chat_id, msg)
+        except Exception as e:
+            print(f"⚠️  Lark send failed: {e}", file=sys.stderr)
+    if config.alerts.telegram_token and config.alerts.telegram_chat_id:
+        try:
+            _send_telegram(config.alerts.telegram_token, config.alerts.telegram_chat_id, msg)
+        except Exception as e:
+            print(f"⚠️  Telegram send failed: {e}", file=sys.stderr)
+
+
 def main():
     config = get_config()
-    token = config.alerts.telegram_token
-    chat_id = config.alerts.telegram_chat_id
     proxy = config.proxy.https_proxy or config.proxy.http_proxy
 
-    if not token or not chat_id:
-        print("⚠️  Telegram not configured. Alerts will print to stdout only.", file=sys.stderr)
+    if not config.alerts.lark_chat_id:
+        print("⚠️  lark_chat_id not set. Alerts will print to stdout only.", file=sys.stderr)
 
     seen: set = set()
     kwargs = {"timeout": 10}
@@ -107,11 +119,7 @@ def main():
 
             for msg in alerts:
                 print(msg)
-                if token and chat_id:
-                    try:
-                        _send_telegram(token, chat_id, msg)
-                    except Exception as e:
-                        print(f"⚠️  Telegram send failed: {e}", file=sys.stderr)
+                _push(config, msg)
 
         except Exception as e:
             print(f"⚠️  Poll cycle error: {e}", file=sys.stderr)

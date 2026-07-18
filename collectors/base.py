@@ -91,14 +91,25 @@ class BaseCollector(ABC):
         conn = duckdb.connect(str(self.db_path))
         started_at = utcnow()
 
-        # Start run
-        conn.execute(
-            """
-            INSERT INTO collector_runs (collector, started_at, status)
-            VALUES (?, ?, 'running')
-            """,
-            [self.name, started_at],
-        )
+        # Start run. PK is (collector, started_at); a same-microsecond rerun
+        # (manual + cron colliding, or a very fast re-invoke) would clash on
+        # this first INSERT and crash the collector *before* it does any work.
+        # Bump started_at by 1µs until it's free — never lose a run to this.
+        for _ in range(1000):
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO collector_runs (collector, started_at, status)
+                    VALUES (?, ?, 'running')
+                    """,
+                    [self.name, started_at],
+                )
+                break
+            except Exception as e:
+                if "constraint" in str(e).lower() or "primary key" in str(e).lower():
+                    started_at = started_at + timedelta(microseconds=1)
+                    continue
+                raise
 
         try:
             rows = self.fetch()

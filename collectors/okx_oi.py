@@ -180,6 +180,11 @@ class OkxOiHistoryCollector(BaseCollector):
     max_staleness = timedelta(hours=3)
     use_env_proxy = True
 
+    # Parameterized so the 1d backbone (OkxOiDailyCollector) can reuse fetch/
+    # validate/upsert by only overriding these three.
+    OKX_PERIOD = "1H"      # rubik endpoint period param
+    GRAN = "1h"            # oi_funding.granularity value
+
     OI_HIST = "/api/v5/rubik/stat/contracts/open-interest-volume"
     FUNDING_HIST = "/api/v5/public/funding-rate-history"
 
@@ -187,6 +192,8 @@ class OkxOiHistoryCollector(BaseCollector):
         super().__init__()
         self.instruments = self.config.okx.instruments
         self.limiter = get_limiter("okx", rate_per_min=300)
+        self.granularity = self.GRAN
+        self.period = self.OKX_PERIOD
 
     def _get(self, client, path, params):
         self.limiter.wait()
@@ -212,7 +219,7 @@ class OkxOiHistoryCollector(BaseCollector):
             for inst_id in self.instruments:
                 # OI history: rubik endpoint keyed by base ccy, 1H period.
                 oi = self._get(client, self.OI_HIST,
-                               {"ccy": self._base_ccy(inst_id), "period": "1H"})
+                               {"ccy": self._base_ccy(inst_id), "period": self.OKX_PERIOD})
                 # rows: [ts, oiUsd(?), volUsd] — confirm order via known field
                 # rubik contracts oi-volume returns [ts, oi, vol] in USD.
                 oi_by_ts = {}
@@ -244,7 +251,7 @@ class OkxOiHistoryCollector(BaseCollector):
                     rows.append({
                         "inst_id": inst_id,
                         "ts": ts,
-                        "granularity": "1h",
+                        "granularity": self.granularity,
                         "oi_ccy": None,       # rubik gives USD only
                         "oi_usd": oi_usd,
                         "funding_rate": funding_at(ts_ms),
@@ -273,21 +280,42 @@ class OkxOiHistoryCollector(BaseCollector):
             # Backfill-friendly: re-fetching the window UPDATEs existing rows
             # (funding may fill in) rather than silently skipping duplicates.
             conn.execute(
-                "DELETE FROM oi_funding WHERE inst_id=? AND ts=? AND granularity='1h'",
-                [r["inst_id"], r["ts"]],
+                "DELETE FROM oi_funding WHERE inst_id=? AND ts=? AND granularity=?",
+                [r["inst_id"], r["ts"], self.granularity],
             )
             conn.execute(
                 """
                 INSERT INTO oi_funding
                 (inst_id, ts, granularity, oi_ccy, oi_usd, funding_rate, mark_price, fetched_at)
-                VALUES (?, ?, '1h', ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [r["inst_id"], r["ts"], r["oi_ccy"], r["oi_usd"],
+                [r["inst_id"], r["ts"], self.granularity, r["oi_ccy"], r["oi_usd"],
                  r["funding_rate"], r["mark_price"], r["fetched_at"]],
             )
             n += 1
         conn.close()
         return n
+
+
+class OkxOiDailyCollector(OkxOiHistoryCollector):
+    """
+    OKX 1d OI backbone — the LONG history (~180 days, verified).
+
+    Same rubik endpoint as the 1h backbone but period='1D', which returns up
+    to 180 daily points. This is the sample base for 90-day OI percentiles
+    (priced-in-check): 1h only reaches 30 days, too short for a 90d window.
+    OI is slow-moving, so a daily snapshot is a statistically sound percentile
+    baseline; the live rt15 value is positioned against it.
+
+    Runs once daily. DELETE+INSERT over the full window → self-heals on outage.
+    """
+
+    name = "okx_oi_1d"
+    schedule = "45 0 * * *"  # once daily (00:45 UTC), after the 1h run
+    max_staleness = timedelta(days=2)
+
+    OKX_PERIOD = "1D"
+    GRAN = "1d"
 
 
 def main():

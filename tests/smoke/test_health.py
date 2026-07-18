@@ -186,6 +186,26 @@ def test_okx_oi_1h(conn):
     assert df["funding_rate"].notna().any(), "1h funding_rate all null — join broke"
 
 
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_okx_oi_1d(conn):
+    """OKX 1d backbone — the long (~180d) sample base for 90-day OI
+    percentiles (priced-in-check). 1h only reaches 30d, too short for 90d."""
+    df = conn.execute(
+        "SELECT * FROM oi_funding WHERE granularity='1d'"
+    ).fetchdf()
+
+    if df.empty:
+        pytest.skip("No 1d OI data yet")
+
+    assert {"inst_id", "ts", "oi_usd"}.issubset(df.columns), "schema drift"
+    # The whole point: need >=90 daily points per instrument for a 90d window.
+    per_inst = df.groupby("inst_id").size().min()
+    assert per_inst >= 90, \
+        f"1d backbone only {per_inst} pts/inst — 90d percentile needs >=90"
+    assert df["ts"].max() > (utcnow() - timedelta(days=2)), \
+        "OKX 1d backbone stale (>2 days — daily collector down)"
+
+
 # ─── events / sightings ─────────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")

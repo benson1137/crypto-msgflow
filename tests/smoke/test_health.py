@@ -236,6 +236,19 @@ def test_consecutive_empty(conn):
     assert not suspicious, f"Cadence collectors with 12+ empties in 6h: {suspicious}"
 
 
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_price_candles(conn):
+    """okx_price backbone — verdict backfill needs a recoverable price series.
+    Must exist, be fresh (twice-daily), and have sane close prices."""
+    df = conn.execute("SELECT * FROM price_candles WHERE bar='1H'").fetchdf()
+    if df.empty:
+        pytest.skip("No price_candles yet")
+    assert {"inst_id", "ts", "close"}.issubset(df.columns), "schema drift"
+    assert df["ts"].max() > (utcnow() - timedelta(hours=14)), \
+        "price_candles stale (>14h — okx_price collector down)"
+    assert (df["close"] > 0).all(), "non-positive close price"
+
+
 def test_verdicts_realized_ret_exists(conn):
     """verdicts must have realized_ret column — the whole point (§2.5)."""
     cols = conn.execute("SELECT * FROM verdicts LIMIT 0").fetchdf().columns

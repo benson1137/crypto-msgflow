@@ -97,6 +97,16 @@ CREATE TABLE IF NOT EXISTS corp_events (
   PRIMARY KEY (entity_id, category, event_datetime)
 );
 
+CREATE TABLE IF NOT EXISTS price_candles (
+  inst_id  VARCHAR NOT NULL,        -- BTC-USDT-SWAP
+  ts       TIMESTAMP NOT NULL,      -- candle open time, UTC
+  bar      VARCHAR NOT NULL,        -- '1H'
+  open     DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE,
+  vol      DOUBLE,                  -- contract volume
+  fetched_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (inst_id, ts, bar)
+);
+
 CREATE TABLE IF NOT EXISTS macro_calendar (
   event_type     VARCHAR NOT NULL,     -- 'FOMC'
   event_date     DATE NOT NULL,        -- decision day (meeting end) = market mover

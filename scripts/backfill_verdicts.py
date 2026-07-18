@@ -6,12 +6,56 @@ from pathlib import Path
 
 import duckdb
 
-from collectors.timeutil import utcnow
-
-# Add project root to path
+# Add project root to path BEFORE importing collectors.*
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from collectors.timeutil import utcnow  # noqa: E402
+
 DB_PATH = Path(__file__).parent.parent / "research.db"
+
+# Coin → OKX perp instrument. Extend as coverage grows.
+COIN_TO_INST = {
+    "BTC": "BTC-USDT-SWAP",
+    "ETH": "ETH-USDT-SWAP",
+}
+
+
+def _resolve_inst(conn, row) -> str | None:
+    """Find the instrument a verdict is about.
+
+    Priority: the linked event's coins[] → else scan the claim text for a
+    known coin symbol. Returns None if nothing maps to a tracked instrument.
+    """
+    # 1. via linked event.coins
+    if row.get("event_id"):
+        ev = conn.execute(
+            "SELECT coins FROM events WHERE event_id = ?", [row["event_id"]]
+        ).fetchone()
+        if ev and ev[0]:
+            for coin in ev[0]:
+                if coin in COIN_TO_INST:
+                    return COIN_TO_INST[coin]
+    # 2. fallback: scan claim text
+    claim = (row.get("claim") or "").upper()
+    for coin, inst in COIN_TO_INST.items():
+        if coin in claim:
+            return inst
+    return None
+
+
+def _price_at(conn, inst_id: str, when, tol_hours: int = 3) -> float | None:
+    """Closest 1H close to `when` within tol_hours. None if none in range."""
+    r = conn.execute(
+        """
+        SELECT close FROM price_candles
+        WHERE inst_id = ? AND bar = '1H'
+          AND abs(date_diff('minute', ts, ?)) <= ? * 60
+        ORDER BY abs(date_diff('minute', ts, ?))
+        LIMIT 1
+        """,
+        [inst_id, when, tol_hours, when],
+    ).fetchone()
+    return r[0] if r else None
 
 
 def backfill_returns(conn: duckdb.DuckDBPyConnection, dry_run: bool = True):
@@ -66,29 +110,35 @@ def backfill_returns(conn: duckdb.DuckDBPyConnection, dry_run: bool = True):
             print(f"⏳ {verdict_id}: window not elapsed yet (need to wait until {realized_at})")
             continue
 
-        # TODO: fetch price at ts and realized_at from oi_funding.mark_price
-        # For now, this is a placeholder — you need to:
-        # 1. Extract coin from event_id or claim
-        # 2. Map to inst_id (e.g., 'BTC' -> 'BTC-USDT-SWAP')
-        # 3. Query oi_funding for closest mark_price
+        inst_id = _resolve_inst(conn, row)
+        if inst_id is None:
+            print(f"⚠️  {verdict_id}: can't resolve a coin/inst_id → skip "
+                  f"(claim: {row['claim'][:50]})")
+            continue
 
-        print(f"🔍 {verdict_id}:")
-        print(f"   Claim: {row['claim'][:80]}...")
-        print(f"   Prediction: {predicted_dir} over {window}")
-        print(f"   Window: {ts} → {realized_at}")
-        print("   ❌ Price lookup not implemented yet\n")
+        p0 = _price_at(conn, inst_id, ts)
+        p1 = _price_at(conn, inst_id, realized_at)
+        if p0 is None or p1 is None:
+            print(f"⚠️  {verdict_id}: no price_candles near ts/realized_at for {inst_id} "
+                  f"(need okx_price to have run) → skip")
+            continue
 
-        # Placeholder logic:
-        # realized_ret = (price_at_realized - price_at_ts) / price_at_ts
-        # if dry_run:
-        #     print(f"   [DRY RUN] Would set realized_ret={realized_ret:.4f}")
-        # else:
-        #     conn.execute("""
-        #         UPDATE verdicts
-        #         SET realized_ret = ?, realized_at = ?
-        #         WHERE verdict_id = ?
-        #     """, [realized_ret, realized_at, verdict_id])
-        #     print(f"   ✓ Updated")
+        realized_ret = (p1 - p0) / p0
+        hit = ((predicted_dir == 'up' and realized_ret > 0) or
+               (predicted_dir == 'down' and realized_ret < 0) or
+               (predicted_dir == 'none' and abs(realized_ret) < 0.005))
+
+        print(f"🔍 {verdict_id} [{inst_id}]  {predicted_dir}/{window}")
+        print(f"   {p0:.2f} → {p1:.2f}  ret={realized_ret:+.4f}  {'HIT' if hit else 'MISS'}")
+
+        if dry_run:
+            print("   [DRY RUN] not written\n")
+        else:
+            conn.execute(
+                "UPDATE verdicts SET realized_ret=?, realized_at=? WHERE verdict_id=?",
+                [realized_ret, realized_at, verdict_id],
+            )
+            print("   ✓ written\n")
 
 
 def main():

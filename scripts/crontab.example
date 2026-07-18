@@ -15,6 +15,7 @@
 # HTTP_PROXY/HTTPS_PROXY set here. use_env_proxy=False collectors
 # (fred, tga, bea — US-gov hosts) ignore it and connect directly.
 
+MAILTO=you@example.com
 PROJECT_DIR=/path/to/crypto-msgflow
 PY=/path/to/venv/bin/python3
 LOCK=/tmp/msgflow-collectors.lock
@@ -26,6 +27,9 @@ HTTPS_PROXY=http://127.0.0.1:7890
 
 # ── OKX OI 1h backbone — twice daily, 30-day window, self-healing backfill ──
 30 */12 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_oi_1h >> logs/okx_oi_1h.log 2>&1'
+
+# ── OKX 1h price OHLCV — verdict-backfill price source, twice daily ──
+20 */12 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_price >> logs/okx_price.log 2>&1'
 
 # ── News / social — every 10 min (offset minutes; flock serializes anyway) ──
 */10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.rss >> logs/rss.log 2>&1'

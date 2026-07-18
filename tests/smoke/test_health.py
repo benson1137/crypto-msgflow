@@ -154,18 +154,36 @@ def test_bea_pce(conn):
 # ─── oi_funding (OKX) — P0 ──────────────────────────────────────────
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
-def test_okx_oi(conn):
-    """OI is P0. 1m granularity should be fresh within 15 min."""
+def test_okx_oi_realtime(conn):
+    """OKX rt15 texture layer — 15-min snapshots, fresh within 45 min."""
     df = conn.execute(
-        "SELECT * FROM oi_funding WHERE granularity='1m'"
+        "SELECT * FROM oi_funding WHERE granularity='rt15'"
     ).fetchdf()
 
     if df.empty:
-        pytest.skip("No OI data yet")
+        pytest.skip("No rt15 OI data yet")
 
     assert {"inst_id", "ts", "oi_usd"}.issubset(df.columns), "schema drift"
-    assert df["ts"].max() > (utcnow() - timedelta(minutes=30)), \
-        "OKX OI data stale (>30 min) — P0 LOSS RISK"
+    assert df["ts"].max() > (utcnow() - timedelta(minutes=45)), \
+        "OKX rt15 OI stale (>45 min)"
+
+
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_okx_oi_1h(conn):
+    """OKX 1h backbone — the recoverable series priced-in analysis reads.
+    30-day window; fresh within ~14h (twice-daily) and funding populated."""
+    df = conn.execute(
+        "SELECT * FROM oi_funding WHERE granularity='1h'"
+    ).fetchdf()
+
+    if df.empty:
+        pytest.skip("No 1h OI data yet")
+
+    assert {"inst_id", "ts", "oi_usd", "funding_rate"}.issubset(df.columns), "schema drift"
+    assert df["ts"].max() > (utcnow() - timedelta(hours=14)), \
+        "OKX 1h backbone stale (>14h — twice-daily collector down)"
+    # funding must be forward-filled, not all-null
+    assert df["funding_rate"].notna().any(), "1h funding_rate all null — join broke"
 
 
 # ─── events / sightings ─────────────────────────────────────────────
@@ -200,16 +218,22 @@ def test_no_stuck_running(conn):
 
 @pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
 def test_consecutive_empty(conn):
-    """§6.3: consecutive empties over 6h are suspicious."""
+    """§6.3: sustained empties are suspicious — but ONLY for cadence-driven
+    sources. Content-driven collectors (rss, x_kol) legitimately return empty
+    for hours (no fresh news / KOL quiet), same reasoning as staleness_by_data_ts.
+    Flagging them would false-alarm constantly. Scope to rhythmic sources."""
+    content_driven = ("rss", "x_kol")
+    placeholders = ",".join("?" for _ in content_driven)
     suspicious = conn.execute(
-        """
+        f"""
         SELECT collector, COUNT(*) AS empties FROM collector_runs
         WHERE started_at > ? - INTERVAL 6 HOUR AND status = 'empty'
+          AND collector NOT IN ({placeholders})
         GROUP BY 1 HAVING COUNT(*) >= 12
         """,
-        [utcnow()],
+        [utcnow(), *content_driven],
     ).fetchall()
-    assert not suspicious, f"Collectors with 12+ empties in 6h: {suspicious}"
+    assert not suspicious, f"Cadence collectors with 12+ empties in 6h: {suspicious}"
 
 
 def test_verdicts_realized_ret_exists(conn):

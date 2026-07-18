@@ -21,8 +21,11 @@ LOCK=/tmp/msgflow-collectors.lock
 HTTP_PROXY=http://127.0.0.1:7890
 HTTPS_PROXY=http://127.0.0.1:7890
 
-# ── P0: OKX OI — 1m granularity, every 5 min (unrecoverable if missed) ──
-*/5 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_oi >> logs/okx_oi.log 2>&1'
+# ── OKX OI realtime texture — 15 min snapshots (granularity=rt15) ──
+*/15 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_oi >> logs/okx_oi.log 2>&1'
+
+# ── OKX OI 1h backbone — twice daily, 30-day window, self-healing backfill ──
+30 */12 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.okx_oi_1h >> logs/okx_oi_1h.log 2>&1'
 
 # ── News / social — every 10 min (offset minutes; flock serializes anyway) ──
 */10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.rss >> logs/rss.log 2>&1'

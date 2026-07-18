@@ -30,6 +30,7 @@ api_key = ""
 kols = [
     "woonomic",
     "ki_young_ju",
+    "aleabitoreddit",
     # add more...
 ]
 

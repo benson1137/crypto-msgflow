@@ -8,6 +8,7 @@ path = "research.db"
 telegram_token = ""
 # Chat ID to send alerts (get from @userinfobot)
 telegram_chat_id = ""
+lark_chat_id = ""
 
 [fred]
 api_key = ""  # https://fred.stlouisfed.org/docs/api/api_key.html

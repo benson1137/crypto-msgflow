@@ -18,6 +18,8 @@ class DatabaseConfig(BaseSettings):
 class AlertsConfig(BaseSettings):
     telegram_token: str = ""
     telegram_chat_id: str = ""
+    # Lark/Feishu via lark-cli (bot identity). Alerts go to this chat_id.
+    lark_chat_id: str = ""
 
 
 class FredConfig(BaseSettings):

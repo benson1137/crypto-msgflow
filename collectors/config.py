@@ -85,6 +85,42 @@ class BigdataConfig(BaseSettings):
     entities: list[dict[str, str]] = Field(default_factory=list)
 
 
+class PolymarketConfig(BaseSettings):
+    # Gamma tag_ids to pull (crypto-relevant only, avoids sports/culture noise).
+    # crypto=21, economy=100328, fomc=100478, fed=159, fed-rates=100196,
+    # economic-policy=101800. Verified live 2026-07.
+    tag_ids: list[int] = Field(
+        default_factory=lambda: [21, 100328, 100478, 159, 100196, 101800]
+    )
+    # Skip low-liquidity markets: their prices are noise, not signal.
+    min_volume24hr: float = 5000.0
+    per_tag_limit: int = 100
+
+
+class OfacConfig(BaseSettings):
+    # 0xB10C nightly-parsed SDN crypto address lists (raw txt, 'lists' branch).
+    # Saves parsing the 80MB sdn_advanced.xml ourselves.
+    raw_base: str = (
+        "https://raw.githubusercontent.com/0xB10C/"
+        "ofac-sanctioned-digital-currency-addresses/lists"
+    )
+    symbols: list[str] = Field(
+        default_factory=lambda: [
+            "ARB", "BCH", "BSC", "BSV", "BTG", "DASH", "ETC", "ETH",
+            "LTC", "SOL", "TRX", "USDC", "USDT", "XBT", "XMR", "XRP", "XVG", "ZEC",
+        ]
+    )
+
+
+class GdeltConfig(BaseSettings):
+    # BigQuery access. Empty project → collector raises loudly (not silent skip).
+    # Auth: set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON, or
+    # bq_credentials_json to a path here.
+    bq_project: str = ""             # billing/query project id
+    bq_credentials_json: str = ""    # optional path to SA key
+    lookback_minutes: int = 90       # pull last 90m each hourly run
+
+
 class Config(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
@@ -95,6 +131,9 @@ class Config(BaseSettings):
     bls: BlsConfig = Field(default_factory=BlsConfig)
     bea: BeaConfig = Field(default_factory=BeaConfig)
     bigdata: BigdataConfig = Field(default_factory=BigdataConfig)
+    polymarket: PolymarketConfig = Field(default_factory=PolymarketConfig)
+    ofac: OfacConfig = Field(default_factory=OfacConfig)
+    gdelt: GdeltConfig = Field(default_factory=GdeltConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
 
 

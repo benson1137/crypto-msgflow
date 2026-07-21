@@ -72,6 +72,28 @@ entities = [
     {ticker = "CLSK", entity_id = "7DFE86", name = "CleanSpark"},
 ]
 
+[polymarket]
+# Gamma tag_ids — crypto/macro only (avoids sports/culture noise).
+# crypto=21, economy=100328, fomc=100478, fed=159, fed-rates=100196,
+# economic-policy=101800. No API key needed.
+tag_ids = [21, 100328, 100478, 159, 100196, 101800]
+min_volume24hr = 5000.0
+per_tag_limit = 100
+
+[ofac]
+# 0xB10C nightly-parsed SDN crypto-address lists (raw txt, no auth).
+raw_base = "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists"
+symbols = ["ARB","BCH","BSC","BSV","BTG","DASH","ETC","ETH","LTC","SOL","TRX","USDC","USDT","XBT","XMR","XRP","XVG","ZEC"]
+
+[gdelt]
+# REQUIRES a BigQuery billing project + credentials. Leave bq_project empty
+# to keep the collector disabled (it raises loudly if run without it).
+# Auth: set GOOGLE_APPLICATION_CREDENTIALS env, or bq_credentials_json path.
+# Install SDK:  pip install 'crypto-msgflow[gdelt]'
+bq_project = ""
+bq_credentials_json = ""
+lookback_minutes = 90
+
 [proxy]
 # Optional: HTTP_PROXY / HTTPS_PROXY for datacenter IP bypass
 # http_proxy = "http://127.0.0.1:7890"

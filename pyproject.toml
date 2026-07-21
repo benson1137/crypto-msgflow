@@ -20,6 +20,10 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.5.0",
 ]
+# GDELT collector only. Heavy SDK; keep it out of the base install.
+gdelt = [
+    "google-cloud-bigquery>=3.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

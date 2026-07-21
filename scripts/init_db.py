@@ -117,6 +117,42 @@ CREATE TABLE IF NOT EXISTS macro_calendar (
   PRIMARY KEY (event_type, event_date, source)
 );
 
+-- §1.10 polymarket_snapshots — 预测市场隐含概率快照
+-- point-in-time: ts = 入库时刻，不是市场时间。信号看 implied_prob 的跳变。
+CREATE TABLE IF NOT EXISTS polymarket_snapshots (
+  ts            TIMESTAMP NOT NULL,   -- snapshot ingest time (point-in-time)
+  market_slug   VARCHAR NOT NULL,     -- stable market id
+  outcome       VARCHAR NOT NULL,     -- 'Yes' / 'No' / ...
+  implied_prob  DOUBLE,               -- outcomePrice = market-implied probability
+  volume24hr    DOUBLE,
+  question      VARCHAR,
+  event_slug    VARCHAR,
+  end_date      VARCHAR,              -- market resolution date (ISO string from API)
+  fetched_at    TIMESTAMP NOT NULL,
+  PRIMARY KEY (ts, market_slug, outcome)
+);
+
+-- §1.11 ofac_crypto_addresses — SDN 加密地址黑名单（特征/风控，信号最硬）
+-- first_seen = 我方首次见到该地址的时刻 = 新制裁落地的软信号。
+CREATE TABLE IF NOT EXISTS ofac_crypto_addresses (
+  address    VARCHAR NOT NULL,
+  symbol     VARCHAR NOT NULL,        -- ETH / XBT / TRX / SOL / XMR ...
+  first_seen TIMESTAMP NOT NULL,      -- when WE first saw it (append-only signal)
+  fetched_at TIMESTAMP NOT NULL,      -- last run that confirmed it present
+  PRIMARY KEY (address, symbol)
+);
+
+-- §1.12 gdelt_tone — 宏观/地缘报道量 + 情绪基调（risk-on/off 背景特征）
+-- 每小时一行 per theme_bucket。信号：doc_count 突增 + avg_tone 骤降。
+CREATE TABLE IF NOT EXISTS gdelt_tone (
+  ts_hour      TIMESTAMP NOT NULL,    -- hour bucket (UTC)
+  theme_bucket VARCHAR NOT NULL,      -- rates | centralbank | sanctions | conflict
+  doc_count    INTEGER,
+  avg_tone     DOUBLE,
+  fetched_at   TIMESTAMP NOT NULL,
+  PRIMARY KEY (ts_hour, theme_bucket)
+);
+
 CREATE TABLE IF NOT EXISTS collector_runs (
   collector    VARCHAR NOT NULL,
   started_at   TIMESTAMP NOT NULL,

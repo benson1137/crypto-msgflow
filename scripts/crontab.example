@@ -48,6 +48,13 @@ HTTPS_PROXY=http://127.0.0.1:7890
 7 1 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.bigdata >> logs/bigdata.log 2>&1'
 0 12 * * 1  flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.fomc    >> logs/fomc.log 2>&1'
 
+# ── Geopolitical (crypto-relevant predictions + sanctions, no news scraping) ──
+*/10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.polymarket >> logs/polymarket.log 2>&1'
+40 0 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.ofac_addresses >> logs/ofac_addresses.log 2>&1'
+# GDELT tone/theme (BigQuery). Credentials configured — ready to enable.
+# Frequently returns empty (90-min window often has no matching themes); this is normal.
+5 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.gdelt >> logs/gdelt.log 2>&1'
+
 # ── Health: daily smoke test 6am UTC (P1 — catches silent failures) ──
 # Read-only; still flocked so it never reads mid-write.
 0 6 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m pytest tests/smoke/ -q >> logs/smoke.log 2>&1'

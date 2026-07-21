@@ -242,7 +242,11 @@ def test_consecutive_empty(conn):
     sources. Content-driven collectors (rss, x_kol) legitimately return empty
     for hours (no fresh news / KOL quiet), same reasoning as staleness_by_data_ts.
     Flagging them would false-alarm constantly. Scope to rhythmic sources."""
-    content_driven = ("rss", "x_kol")
+    # ofac_addresses is empty on any day with no new designation — its normal
+    # steady state. (Daily cadence can't hit 12/6h anyway, but scope it for
+    # intent.) polymarket stays OUT: it writes ~1600 rows/run, so sustained
+    # empties there ARE a real fault worth flagging.
+    content_driven = ("rss", "x_kol", "ofac_addresses")
     placeholders = ",".join("?" for _ in content_driven)
     suspicious = conn.execute(
         f"""
@@ -269,6 +273,44 @@ def test_price_candles(conn):
     assert (df["close"] > 0).all(), "non-positive close price"
 
 
+# ─── polymarket_snapshots — prediction-market implied probabilities ──
+
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_polymarket_snapshots(conn):
+    """Polymarket implied-prob snapshots. Snapshot ts is always 'now', so
+    freshness is a hard check: latest snapshot within ~30 min (10-min cron).
+    Also assert probabilities are in [0,1] — the whole point is a valid prob."""
+    df = conn.execute("SELECT * FROM polymarket_snapshots").fetchdf()
+    if df.empty:
+        pytest.skip("No polymarket data yet")
+
+    assert {"ts", "market_slug", "outcome", "implied_prob"}.issubset(df.columns), \
+        "schema drift"
+    assert df["ts"].max() > (utcnow() - timedelta(minutes=30)), \
+        "polymarket snapshots stale (>30 min — 10-min collector down)"
+    probs = df["implied_prob"].dropna()
+    assert ((probs >= 0) & (probs <= 1)).all(), \
+        "implied_prob outside [0,1] — outcomePrices parse broke"
+
+
+# ─── ofac_crypto_addresses — SDN sanctioned addresses (hard signal) ──
+
+@pytest.mark.skipif(not DB_PATH.exists(), reason="DB not initialized")
+def test_ofac_addresses(conn):
+    """SDN crypto blacklist. Not freshness-by-data-age (list only grows on a
+    designation day). Assert it's populated, schema holds, and the confirming
+    fetched_at is recent — a stale fetched_at means the daily pull broke."""
+    df = conn.execute("SELECT * FROM ofac_crypto_addresses").fetchdf()
+    if df.empty:
+        pytest.skip("No OFAC address data yet")
+
+    assert {"address", "symbol", "first_seen", "fetched_at"}.issubset(df.columns), \
+        "schema drift"
+    # fetched_at is refreshed every successful daily run → recency = liveness.
+    assert df["fetched_at"].max() > (utcnow() - timedelta(days=3)), \
+        "OFAC addresses not confirmed in 3 days — daily pull likely broke"
+
+
 def test_news_fulltext_schema(conn):
     """news_fulltext is a 7-day LRU cache; assert schema + no stale rows leak.
     (Read path is collectors.fulltext.get_fulltext, not a direct query.)"""
@@ -286,3 +328,25 @@ def test_verdicts_realized_ret_exists(conn):
     """verdicts must have realized_ret column — the whole point (§2.5)."""
     cols = conn.execute("SELECT * FROM verdicts LIMIT 0").fetchdf().columns
     assert "realized_ret" in cols, "verdicts.realized_ret missing — no backtest possible"
+
+
+def test_dbpath_resolves_from_any_cwd():
+    """collectors.dbpath must resolve the DB absolutely, regardless of CWD.
+
+    Skills invoked via the Lark bridge run from a parent dir, not the project
+    root, so a relative 'research.db' would connect to the wrong (or an empty)
+    file. This locks in the CWD-independent resolution.
+    """
+    import os
+
+    from collectors.dbpath import research_db_path
+
+    orig = os.getcwd()
+    try:
+        os.chdir("/tmp")
+        p = research_db_path()
+        assert p.is_absolute(), f"db path not absolute: {p}"
+        assert p.name == "research.db", f"unexpected db name: {p}"
+        assert p.exists(), f"resolved path does not exist: {p}"
+    finally:
+        os.chdir(orig)

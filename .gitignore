@@ -38,3 +38,4 @@ backups/
 # OS
 .DS_Store
 Thumbs.db
+config/gcp-sa.json

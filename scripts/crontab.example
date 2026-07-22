@@ -36,7 +36,7 @@ HTTPS_PROXY=http://127.0.0.1:7890
 
 # ── News / social — every 10 min (offset minutes; flock serializes anyway) ──
 */10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.rss >> logs/rss.log 2>&1'
-2-59/10 * * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.x_kol >> logs/x_kol.log 2>&1'
+0 8,20 * * * flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.x_kol >> logs/x_kol.log 2>&1'
 
 # ── Macro (daily, offset minutes) ──
 0  13 * * *   flock -x -w 240 $LOCK sh -c 'cd "$PROJECT_DIR" && "$PY" -m collectors.fred >> logs/fred.log 2>&1'
